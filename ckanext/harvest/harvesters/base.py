@@ -250,59 +250,40 @@ class HarvesterBase(SingletonPlugin):
         '''
         self.translator = GoogleTranslator(source='auto', target=language)
 
-    def can_translate(self, key) -> bool:
-        return key != 'id' and key != 'name' and key != 'type' and key != 'state'\
+    def is_bool(self, str) -> bool:
+        return str == 'True' or str == 'False'
+
+    def can_translate(self, key, value) -> bool:
+        black_list = ['id', 'type', 'format', 'code', 'language', 'hash', 'url', 'geometry', 'state',
+                      'server', 'layer', 'time', 'created', 'modified', 'mail', 'version', 'size']
+
+        return isinstance(value, str) and not self.is_bool(value) \
+               and not any(x in key for x in black_list) \
                and not key.endswith('_id') and not key.startswith("id_")
+
+    def translate_dict(self, name, metadata):
+        '''
+        Translate dictionary content
+        '''
+        for key, value in metadata.items():
+            if type(value) is dict:
+                self.translate_dict(key, value)
+            elif type(value) is list:
+                for node in value:
+                    if type(node) is dict:
+                        self.translate_dict(key, node)
+            elif self.can_translate(key, value):
+                try:
+                    metadata.update({key: self.translate(value)})
+                    log.debug('Translated %s field: %s = %s (%s)', name, key, metadata[key], value)
+                except Exception as e:
+                    log.debug('Failed to translate %s field: %s = %s, error: %s', name, key, value, e.message)
 
     def translate_pakage(self, pkg_dict):
         '''
-        Translate dataset first level content and its groups and tags
+        Translate dataset content and its groups and tags...
         '''
-        # translate dataset attributes except the id
-        for key, value in pkg_dict.items():
-            if isinstance(value, str) and self.can_translate(key):
-                try:
-                    pkg_dict.update({key: self.translate(value)})
-                    log.debug('Translated dataset field: %s = %s (%s)', key, pkg_dict[key], value)
-                except Exception as e:
-                    log.debug('Failed to translate dataset field: %s = %s, error: %s', key, value, e.message)
-
-        if 'groups' in pkg_dict:
-            for group_ in pkg_dict['groups']:
-                # translate all groups attributes except the id
-                for key, value in group_.items():
-                    if key != 'id':
-                        try:
-                            group_.update({key: self.translate(value)})
-                            log.debug('Translated group field: %s = %s (%s)', key, group_[key], value)
-                        except Exception as e:
-                            log.debug('Failed to translate group field: %s = %s, error: %s', key, value, e.message)
-
-        if 'tags' in pkg_dict:
-            for tag_ in pkg_dict['tags']:
-                # translate all tags attributes except the id
-                for key, value in tag_.items():
-                    if key != 'id':
-                        try:
-                            translated_tag = self.translate(value)
-                            if translated_tag:
-                                tag_.update({key: munge_tag(translated_tag)})
-                            log.debug('Translated tag field: %s = %s (%s)', key, tag_[key], value)
-                        except Exception as e:
-                            log.debug('Failed to translate tag field: %s = %s, error: %s', key, value, e.message)
-
-    def translate_org(self, org):
-        '''
-        Translate organization
-        '''
-        for key, value in org.items():
-            if key != 'id':
-                try:
-                    org.update({key: self.translate(value)})
-                    log.debug('Translated org field: %s = %s (%s)', key, org[key], value)
-                except Exception as e:
-                    log.debug('Failed to translate org field: %s = %s, error: %s', key, value,
-                              e.message)
+        self.translate_dict('dataset', pkg_dict)
 
     def _create_harvest_objects(self, remote_ids, harvest_job):
         '''
