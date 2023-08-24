@@ -237,10 +237,14 @@ class HarvesterBase(SingletonPlugin):
         '''
         if text and isinstance(text, str) and text.strip()\
                and not text.isnumeric():
-            # Google translate free plan is limited to 5000 characters per request
+            # Google translate free plan is limited to 5000 characters
             trans = ''
             for chunk in self.split_string(text=text, limit=5000):
                 trans += self.translator.translate(chunk) + ' '
+                sleep(0.5)
+
+            if (' ' not in text):
+                trans = trans.replace(' ', '')
             return trans.strip()
         return text
 
@@ -248,18 +252,20 @@ class HarvesterBase(SingletonPlugin):
         '''
         Init translator's target language
         '''
-        self.translator = GoogleTranslator(source='auto', target=language)
+        self.translator = GoogleTranslator(source='auto', target=language if language else 'en')
 
     def is_bool(self, str) -> bool:
         return str == 'True' or str == 'False'
 
     def can_translate(self, key, value) -> bool:
-        black_list = ['id', 'type', 'format', 'code', 'language', 'hash', 'url', 'geometry', 'state',
-                      'server', 'layer', 'time', 'created', 'modified', 'mail', 'version', 'size']
+        black_list = ['type', 'format', 'code', 'language', 'hash', 'url', 'geometry', 'state',
+                      'server', 'layer', 'time', 'created', 'modified', 'mail', 'version', 'size',
+                      'uri', 'theme', 'uid', 'issued', 'source', '@']
 
-        return isinstance(value, str) and not self.is_bool(value) \
+        return value is not None and type(value) is str and not self.is_bool(value) \
                and not any(x in key for x in black_list) \
-               and not key.endswith('_id') and not key.startswith("id_")
+               and not key.endswith('_id') and not key.startswith('id') \
+               and not key == 'key' and not key == 'value'
 
     def translate_dict(self, name, metadata):
         '''
@@ -274,10 +280,12 @@ class HarvesterBase(SingletonPlugin):
                         self.translate_dict(key, node)
             elif self.can_translate(key, value):
                 try:
+                    if key == 'name':
+                        value = value[:100]
                     metadata.update({key: self.translate(value)})
                     log.debug('Translated %s field: %s = %s (%s)', name, key, metadata[key], value)
                 except Exception as e:
-                    log.debug('Failed to translate %s field: %s = %s, error: %s', name, key, value, e.message)
+                    log.debug('Failed to translate %s field: %s = %s, error: %s', name, key, value, str(e))
 
     def translate_pakage(self, pkg_dict):
         '''
