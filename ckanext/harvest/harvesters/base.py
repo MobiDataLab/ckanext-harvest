@@ -280,9 +280,11 @@ class HarvesterBase(SingletonPlugin):
                         self.translate_dict(key, node)
             elif self.can_translate(key, value):
                 try:
-                    if key == 'name':
-                        value = value[:100]
-                    metadata.update({key: self.translate(value)})
+                    translated_value = self.translate(value)
+                    if name == 'tags' and key == 'name':
+                        translated_value = translated_value[:100]
+
+                    metadata.update({key: translated_value})
                     log.debug('Translated %s field: %s = %s (%s)', name, key, metadata[key], value)
                 except Exception as e:
                     log.debug('Failed to translate %s field: %s = %s, error: %s', name, key, value, str(e))
